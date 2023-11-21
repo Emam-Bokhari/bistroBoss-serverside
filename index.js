@@ -3,8 +3,10 @@ const cors=require("cors")
 const jwt=require("jsonwebtoken")
 const cookieParser=require("cookie-parser")
 require("dotenv").config()
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY)
 const port=process.env.PORT||3000
 const app=express()
+
 
 app.use(cors({
   origin:["http://localhost:5173"],
@@ -126,6 +128,47 @@ const verifyAdmin=async(req,res,next)=>{
         const result = await menuCollection.find().toArray();
         res.send(result);
     })
+
+    // :: get menu data for spefific data show 
+    app.get("/api/v1/:menuItemId/menu",async(req,res)=>{
+      const menuItemId=req.params.menuItemId
+      const query={_id:new ObjectId(menuItemId)}
+      const result=await menuCollection.findOne(query)
+      res.send(result)
+    })
+
+    // add menu item :: post
+    app.post('/api/v1/add-menu-item',verifyToken,verifyAdmin,async(req,res)=>{
+      const menuItem=req.body 
+      const result=await menuCollection.insertOne(menuItem)
+      res.send(result)
+    })
+
+    // update menu item :: patch
+    app.patch('/api/v1/:menuItemId/update-menu',async(req,res)=>{
+      const menuItem=req.body 
+      const menuItemId=req.params.menuItemId
+      const query={_id:new ObjectId(menuItemId)}
+      const updatedMenu ={
+        $set:{
+          category:menuItem.category,
+          price:menuItem.price,
+          recipe:menuItem.recipe,
+          image:menuItem.image
+        }
+      }
+      const result=await menuCollection.updateOne(query,updatedMenu)
+      res.send(result)
+    
+    })
+
+    // delete menu item :: delete
+    app.delete('/api/v1/:menuItemId/delete-menu-item',verifyToken,verifyAdmin,async(req,res)=>{
+      const menuItemId=req.params.menuItemId 
+      const query={_id:new ObjectId(menuItemId)}
+      const result=await menuCollection.deleteOne(query)
+      res.send(result)
+    })
     
     // reviews
     app.get('/api/v1/reviews', async(req, res) =>{
@@ -197,6 +240,23 @@ const verifyAdmin=async(req,res,next)=>{
       const result=await usersCollection.updateOne(query,updatedDoc)
       res.send(result)
     })
+
+    // payment gateway
+    app.post('/create-payment-intent', async (req, res) => {
+      const { price } = req.body;
+      const amount = parseInt(price * 100);
+      console.log(amount, 'amount inside the intent')
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: 'usd',
+        payment_method_types: ['card']
+      });
+
+      res.send({
+        clientSecret: paymentIntent.client_secret
+      })
+    });
 
     // Send a ping to confirm a successful connection
      client.db("admin").command({ ping: 1 });
